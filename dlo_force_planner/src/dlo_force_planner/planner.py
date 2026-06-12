@@ -89,6 +89,8 @@ def optimize_force_sequence(
             rollout = simulator.rollout(force_locations, force_sequence)
             cost, _ = total_cost(
                 rollout.positions,
+                rollout.snapshots,
+                simulator.initial_positions,
                 target_shape,
                 force_locations,
                 force_sequence,
@@ -123,6 +125,8 @@ def optimize_force_sequence(
     rollout = simulator.rollout(best_force_locations, best_force_sequence)
     best_cost, components = total_cost(
         rollout.positions,
+        rollout.snapshots,
+        simulator.initial_positions,
         target_shape,
         best_force_locations,
         best_force_sequence,

@@ -68,6 +68,29 @@ def plot_trajectory_snapshots(
     plt.close(fig)
 
 
+def plot_trajectory_error(
+    snapshots: np.ndarray,
+    target_shape: np.ndarray,
+    output_path: Path,
+) -> None:
+    """Save per-step shape error to the final target shape."""
+
+    errors = []
+    for snapshot in snapshots:
+        delta = snapshot - target_shape
+        errors.append(float(np.mean(np.sum(delta * delta, axis=1))))
+
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    ax.plot(np.arange(len(errors)), errors, "o-", color="tab:red")
+    ax.set_xlabel("planning step")
+    ax.set_ylabel("shape error to target")
+    ax.set_title("Trajectory error to target")
+    ax.grid(True, alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+
+
 def plot_force_history(
     force_sequence: np.ndarray,
     config: DemoConfig,

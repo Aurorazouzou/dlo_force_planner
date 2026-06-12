@@ -34,6 +34,7 @@ from dlo_force_planner.visualization import (
     plot_force_locations,
     plot_length_error,
     plot_shape_result,
+    plot_trajectory_error,
     plot_trajectory_snapshots,
     save_motion_gif,
 )
@@ -122,6 +123,11 @@ def main() -> None:
         config,
         config.figure_dir / "length_error.png",
     )
+    plot_trajectory_error(
+        result.snapshots,
+        target_shape,
+        config.figure_dir / "trajectory_error.png",
+    )
     save_motion_gif(
         result.snapshots,
         target_shape,
@@ -181,6 +187,8 @@ def main() -> None:
 
             _, replay_metrics = total_cost(
                 replay_snapshots[-1],
+                replay_snapshots,
+                simulator.initial_positions,
                 target_shape,
                 result.best_force_locations,
                 result.best_force_sequence,
@@ -224,6 +232,7 @@ def main() -> None:
     print(f"  {config.figure_dir / 'force_locations.png'}")
     print(f"  {config.figure_dir / 'convergence.png'}")
     print(f"  {config.figure_dir / 'length_error.png'}")
+    print(f"  {config.figure_dir / 'trajectory_error.png'}")
     print(f"  {config.animation_dir / 'dlo_motion.gif'}")
     print(f"  {config.data_dir / 'best_force_sequence.csv'}")
     print(f"  {config.data_dir / 'optimized_force_locations.csv'}")

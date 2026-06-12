@@ -61,10 +61,13 @@ class DemoConfig:
     curvature_weight: float = 8.0
     length_weight: float = 5000.0
     separation_weight: float = 1.0
+    trajectory_weight: float = 200.0
+    path_smoothness_weight: float = 50.0
+    progress_weight: float = 50.0
 
     # GA settings. Increase n_generations for prettier convergence.
-    population_size: int = 12
-    n_generations: int = 8
+    population_size: int = 40
+    n_generations: int = 80
     random_seed: int = 7
 
     # Output folders.

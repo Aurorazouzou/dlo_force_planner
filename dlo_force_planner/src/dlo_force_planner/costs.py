@@ -28,6 +28,42 @@ def shape_error(final_shape: np.ndarray, target_shape: np.ndarray) -> float:
     return float(np.mean(np.sum(distances * distances, axis=1)))
 
 
+def trajectory_shape_error(
+    snapshots: np.ndarray,
+    initial_shape: np.ndarray,
+    target_shape: np.ndarray,
+) -> float:
+    """Penalize deviation from a linear interpolation in configuration space."""
+
+    horizon = snapshots.shape[0] - 1
+    if horizon <= 0:
+        return 0.0
+
+    errors = []
+    for step, snapshot in enumerate(snapshots):
+        alpha = step / horizon
+        intermediate_target = (1.0 - alpha) * initial_shape + alpha * target_shape
+        errors.append(shape_error(snapshot, intermediate_target))
+    return float(np.mean(errors))
+
+
+def path_smoothness_penalty(snapshots: np.ndarray) -> float:
+    """Penalize sudden jumps between neighboring DLO configurations."""
+
+    if snapshots.shape[0] <= 1:
+        return 0.0
+    delta = np.diff(snapshots, axis=0)
+    return float(np.mean(np.sum(delta * delta, axis=2)))
+
+
+def monotonic_progress_penalty(snapshots: np.ndarray, target_shape: np.ndarray) -> float:
+    """Penalize rollout steps that move farther away from the target shape."""
+
+    errors = np.asarray([shape_error(snapshot, target_shape) for snapshot in snapshots])
+    increases = np.maximum(0.0, np.diff(errors))
+    return float(np.mean(increases * increases)) if len(increases) else 0.0
+
+
 def force_magnitude_penalty(force_sequence: np.ndarray) -> float:
     """Mean squared force magnitude across all steps and control nodes."""
 
@@ -82,6 +118,8 @@ def separation_penalty(force_locations: np.ndarray, config: DemoConfig) -> float
 
 def total_cost(
     final_shape: np.ndarray,
+    snapshots: np.ndarray,
+    initial_shape: np.ndarray,
     target_shape: np.ndarray,
     force_locations: np.ndarray,
     force_sequence: np.ndarray,
@@ -97,6 +135,16 @@ def total_cost(
         "length_change": length_change_penalty(final_shape, config),
         "length_error": total_length_error_penalty(final_shape, config),
         "separation": separation_penalty(force_locations, config),
+        "trajectory_shape_error": trajectory_shape_error(
+            snapshots,
+            initial_shape,
+            target_shape,
+        ),
+        "path_smoothness": path_smoothness_penalty(snapshots),
+        "monotonic_progress_penalty": monotonic_progress_penalty(
+            snapshots,
+            target_shape,
+        ),
     }
 
     length_error = segment_length_change(final_shape, config)
@@ -128,6 +176,9 @@ def total_cost(
         + config.length_weight * components["length_error"]
         + config.length_weight * components["length_change"]
         + config.separation_weight * components["separation"]
+        + config.trajectory_weight * components["trajectory_shape_error"]
+        + config.path_smoothness_weight * components["path_smoothness"]
+        + config.progress_weight * components["monotonic_progress_penalty"]
     )
     components["total_cost"] = float(weighted_total)
     return float(weighted_total), components
