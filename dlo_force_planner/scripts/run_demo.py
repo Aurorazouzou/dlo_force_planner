@@ -29,6 +29,8 @@ from dlo_force_planner.planner import optimize_force_sequence
 from dlo_force_planner.simulator import SimpleDLOSimulator
 from dlo_force_planner.target_shapes import arc_length, generate_inextensible_arc_target
 from dlo_force_planner.visualization import (
+    plot_aligned_shape_result,
+    plot_center_of_mass_trajectory,
     plot_convergence,
     plot_force_history,
     plot_force_locations,
@@ -97,6 +99,13 @@ def main() -> None:
         config,
         config.figure_dir / "shape_result.png",
     )
+    plot_aligned_shape_result(
+        simulator.initial_positions,
+        target_shape,
+        result.final_shape,
+        config,
+        config.figure_dir / "aligned_shape_result.png",
+    )
     plot_trajectory_snapshots(
         result.snapshots,
         target_shape,
@@ -127,6 +136,11 @@ def main() -> None:
         result.snapshots,
         target_shape,
         config.figure_dir / "trajectory_error.png",
+    )
+    plot_center_of_mass_trajectory(
+        result.snapshots,
+        config,
+        config.figure_dir / "center_of_mass_trajectory.png",
     )
     save_motion_gif(
         result.snapshots,
@@ -227,12 +241,14 @@ def main() -> None:
 
     print("Done. Generated files:")
     print(f"  {config.figure_dir / 'shape_result.png'}")
+    print(f"  {config.figure_dir / 'aligned_shape_result.png'}")
     print(f"  {config.figure_dir / 'trajectory_snapshots.png'}")
     print(f"  {config.figure_dir / 'force_history.png'}")
     print(f"  {config.figure_dir / 'force_locations.png'}")
     print(f"  {config.figure_dir / 'convergence.png'}")
     print(f"  {config.figure_dir / 'length_error.png'}")
     print(f"  {config.figure_dir / 'trajectory_error.png'}")
+    print(f"  {config.figure_dir / 'center_of_mass_trajectory.png'}")
     print(f"  {config.animation_dir / 'dlo_motion.gif'}")
     print(f"  {config.data_dir / 'best_force_sequence.csv'}")
     print(f"  {config.data_dir / 'optimized_force_locations.csv'}")

@@ -32,6 +32,7 @@ class DemoConfig:
     rod_length: float = 0.05
     inextensible: bool = True
     constraint_iterations: int = 20
+    quasi_static: bool = True
 
     # Planning problem.
     horizon: int = 12
@@ -61,9 +62,11 @@ class DemoConfig:
     curvature_weight: float = 8.0
     length_weight: float = 5000.0
     separation_weight: float = 1.0
-    trajectory_weight: float = 200.0
-    path_smoothness_weight: float = 50.0
-    progress_weight: float = 50.0
+    trajectory_weight: float = 0.0
+    path_smoothness_weight: float = 100.0
+    progress_weight: float = 20.0
+    net_force_weight: float = 10.0
+    net_torque_weight: float = 10.0
 
     # GA settings. Increase n_generations for prettier convergence.
     population_size: int = 40

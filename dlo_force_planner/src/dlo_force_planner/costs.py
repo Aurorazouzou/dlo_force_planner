@@ -28,6 +28,26 @@ def shape_error(final_shape: np.ndarray, target_shape: np.ndarray) -> float:
     return float(np.mean(np.sum(distances * distances, axis=1)))
 
 
+def aligned_shape_error(final_shape: np.ndarray, target_shape: np.ndarray) -> float:
+    """Shape error after removing translation by centroid alignment."""
+
+    final_centered = final_shape - np.mean(final_shape, axis=0)
+    target_centered = target_shape - np.mean(target_shape, axis=0)
+    return shape_error(final_centered, target_centered)
+
+
+def configured_shape_error(
+    final_shape: np.ndarray,
+    target_shape: np.ndarray,
+    config: DemoConfig,
+) -> float:
+    """Use absolute error for fixed endpoints and aligned error for free DLO."""
+
+    if config.fix_endpoints:
+        return shape_error(final_shape, target_shape)
+    return aligned_shape_error(final_shape, target_shape)
+
+
 def trajectory_shape_error(
     snapshots: np.ndarray,
     initial_shape: np.ndarray,
@@ -59,7 +79,7 @@ def path_smoothness_penalty(snapshots: np.ndarray) -> float:
 def monotonic_progress_penalty(snapshots: np.ndarray, target_shape: np.ndarray) -> float:
     """Penalize rollout steps that move farther away from the target shape."""
 
-    errors = np.asarray([shape_error(snapshot, target_shape) for snapshot in snapshots])
+    errors = np.asarray([aligned_shape_error(snapshot, target_shape) for snapshot in snapshots])
     increases = np.maximum(0.0, np.diff(errors))
     return float(np.mean(increases * increases)) if len(increases) else 0.0
 
@@ -77,6 +97,55 @@ def force_smoothness_penalty(force_sequence: np.ndarray) -> float:
         return 0.0
     force_delta = np.diff(force_sequence, axis=0)
     return float(np.mean(np.sum(force_delta * force_delta, axis=2)))
+
+
+def net_force_penalty(force_sequence: np.ndarray) -> float:
+    """Penalize nonzero resultant force at each planning step."""
+
+    net_force = np.sum(force_sequence, axis=1)
+    return float(np.mean(np.sum(net_force * net_force, axis=1)))
+
+
+def force_torque_penalty(
+    force_locations: np.ndarray,
+    force_sequence: np.ndarray,
+    initial_shape: np.ndarray,
+    config: DemoConfig,
+) -> float:
+    """Penalize net out-of-plane torque from the applied planar forces."""
+
+    force_points = force_application_points(force_locations, initial_shape, config)
+    center = np.mean(initial_shape, axis=0)
+    torques = []
+    for step in range(force_sequence.shape[0]):
+        moment_arm = force_points - center
+        force = force_sequence[step]
+        torque_z = moment_arm[:, 0] * force[:, 1] - moment_arm[:, 1] * force[:, 0]
+        torques.append(float(np.sum(torque_z)))
+    torques = np.asarray(torques)
+    return float(np.mean(torques * torques))
+
+
+def force_application_points(
+    force_locations: np.ndarray,
+    reference_shape: np.ndarray,
+    config: DemoConfig,
+) -> np.ndarray:
+    """Map continuous force locations to interpolated points on a reference DLO."""
+
+    locations = np.asarray(force_locations, dtype=float)
+    if locations.ndim == 2:
+        locations = locations[0]
+
+    points = []
+    for location in locations:
+        left = int(np.floor(location))
+        left = int(np.clip(left, 0, config.n_nodes - 1))
+        right = min(left + 1, config.n_nodes - 1)
+        alpha = float(location - left)
+        point = (1.0 - alpha) * reference_shape[left] + alpha * reference_shape[right]
+        points.append(point)
+    return np.asarray(points)
 
 
 def curvature_penalty(final_shape: np.ndarray) -> float:
@@ -128,9 +197,18 @@ def total_cost(
     """Return weighted total cost plus a dictionary of readable components."""
 
     components = {
-        "shape_error": shape_error(final_shape, target_shape),
+        "shape_error": configured_shape_error(final_shape, target_shape, config),
+        "aligned_shape_error": aligned_shape_error(final_shape, target_shape),
+        "absolute_shape_error": shape_error(final_shape, target_shape),
         "force_magnitude": force_magnitude_penalty(force_sequence),
         "force_smoothness": force_smoothness_penalty(force_sequence),
+        "net_force_penalty": net_force_penalty(force_sequence),
+        "net_torque_penalty": force_torque_penalty(
+            force_locations,
+            force_sequence,
+            initial_shape,
+            config,
+        ),
         "curvature": curvature_penalty(final_shape),
         "length_change": length_change_penalty(final_shape, config),
         "length_error": total_length_error_penalty(final_shape, config),
@@ -172,6 +250,8 @@ def total_cost(
         config.shape_weight * components["shape_error"]
         + config.force_weight * components["force_magnitude"]
         + config.smooth_weight * components["force_smoothness"]
+        + config.net_force_weight * components["net_force_penalty"]
+        + config.net_torque_weight * components["net_torque_penalty"]
         + config.curvature_weight * components["curvature"]
         + config.length_weight * components["length_error"]
         + config.length_weight * components["length_change"]

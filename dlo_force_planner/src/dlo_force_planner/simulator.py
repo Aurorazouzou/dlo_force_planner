@@ -79,6 +79,7 @@ class SimpleDLOSimulator:
                     positions = self._project_inextensible_lengths(positions)
                 else:
                     positions = self._enforce_segment_lengths(positions)
+                velocities = (positions - previous_positions) / self.config.dt
 
                 if self.config.fix_endpoints:
                     # Some experiments need fixed endpoints. The default demo
@@ -88,6 +89,8 @@ class SimpleDLOSimulator:
                     velocities[0] = 0.0
                     velocities[-1] = 0.0
 
+            if self.config.quasi_static:
+                velocities *= 0.0
             snapshots.append(positions.copy())
 
         return SimulationResult(

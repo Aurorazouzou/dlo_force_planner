@@ -43,6 +43,31 @@ def plot_shape_result(
     plt.close(fig)
 
 
+def plot_aligned_shape_result(
+    initial_shape: np.ndarray,
+    target_shape: np.ndarray,
+    final_shape: np.ndarray,
+    config: DemoConfig,
+    output_path: Path,
+) -> None:
+    """Save a centroid-aligned comparison of target and final DLO shapes."""
+
+    target_center = np.mean(target_shape, axis=0)
+    initial_aligned = initial_shape - np.mean(initial_shape, axis=0) + target_center
+    final_aligned = final_shape - np.mean(final_shape, axis=0) + target_center
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(initial_aligned[:, 0], initial_aligned[:, 1], "o--", label="initial aligned")
+    ax.plot(target_shape[:, 0], target_shape[:, 1], "k-", linewidth=2.0, label="target")
+    ax.plot(final_aligned[:, 0], final_aligned[:, 1], "ro-", label="final aligned")
+    _set_equal_dlo_axes(ax, config)
+    ax.set_title("Centroid-aligned final shape")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+
+
 def plot_trajectory_snapshots(
     snapshots: np.ndarray,
     target_shape: np.ndarray,
@@ -86,6 +111,25 @@ def plot_trajectory_error(
     ax.set_ylabel("shape error to target")
     ax.set_title("Trajectory error to target")
     ax.grid(True, alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+
+
+def plot_center_of_mass_trajectory(
+    snapshots: np.ndarray,
+    config: DemoConfig,
+    output_path: Path,
+) -> None:
+    """Save the DLO centroid trajectory over planning steps."""
+
+    centers = np.mean(snapshots, axis=1)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(centers[:, 0], centers[:, 1], "o-", color="tab:green")
+    for step, center in enumerate(centers):
+        ax.annotate(str(step), xy=center, xytext=(4, 4), textcoords="offset points", fontsize=8)
+    _set_equal_dlo_axes(ax, config)
+    ax.set_title("Center of mass trajectory")
     fig.tight_layout()
     fig.savefig(output_path, dpi=160)
     plt.close(fig)
