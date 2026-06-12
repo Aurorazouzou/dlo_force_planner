@@ -12,9 +12,10 @@ from .config import DemoConfig
 def _set_equal_dlo_axes(ax, config: DemoConfig) -> None:
     """Apply consistent axis limits so all plots are easy to compare."""
 
-    margin = 0.12
+    margin = 0.15 * config.rod_length
+    y_margin = 0.20 * config.rod_length
     ax.set_xlim(-margin, config.length + margin)
-    ax.set_ylim(-0.18, max(0.45, config.target_height + 0.15))
+    ax.set_ylim(-y_margin, config.target_height + y_margin)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True, alpha=0.25)
     ax.set_xlabel("x")
@@ -77,18 +78,79 @@ def plot_force_history(
     steps = np.arange(force_sequence.shape[0])
     fig, axes = plt.subplots(2, 1, figsize=(7, 5), sharex=True)
 
-    for local_index, node_index in enumerate(config.force_nodes):
-        axes[0].plot(steps, force_sequence[:, local_index, 0], "o-", label=f"node {node_index}")
-        axes[1].plot(steps, force_sequence[:, local_index, 1], "o-", label=f"node {node_index}")
+    for force_index in range(force_sequence.shape[1]):
+        label = f"force {force_index + 1}"
+        axes[0].plot(steps, force_sequence[:, force_index, 0], "o-", label=label)
+        axes[1].plot(steps, force_sequence[:, force_index, 1], "o-", label=label)
 
     axes[0].set_ylabel("Fx")
     axes[1].set_ylabel("Fy")
     axes[1].set_xlabel("planning step")
     for ax in axes:
+        ax.axhline(config.force_max, color="0.25", linestyle="--", linewidth=1.0, alpha=0.6)
+        ax.axhline(-config.force_max, color="0.25", linestyle="--", linewidth=1.0, alpha=0.6)
         ax.grid(True, alpha=0.25)
         ax.legend(fontsize=8)
 
     fig.suptitle("Optimized force history")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+
+
+def plot_length_error(
+    final_shape: np.ndarray,
+    config: DemoConfig,
+    output_path: Path,
+) -> None:
+    """Save per-segment length error for the final DLO shape."""
+
+    segment_lengths = np.linalg.norm(np.diff(final_shape, axis=0), axis=1)
+    rest_length = config.rod_length / (config.n_nodes - 1)
+    length_error = segment_lengths - rest_length
+    segment_ids = np.arange(len(length_error))
+
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    ax.bar(segment_ids, length_error, color="tab:blue", alpha=0.8)
+    ax.axhline(0.0, color="0.2", linewidth=1.0)
+    ax.set_xlabel("segment index")
+    ax.set_ylabel("length change")
+    ax.set_title("Segment length error")
+    ax.grid(True, axis="y", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+
+
+def plot_force_locations(
+    initial_shape: np.ndarray,
+    force_locations: np.ndarray,
+    config: DemoConfig,
+    output_path: Path,
+) -> None:
+    """Save a plot showing the optimized continuous force locations."""
+
+    fig, ax = plt.subplots(figsize=(7, 3.2))
+    ax.plot(initial_shape[:, 0], initial_shape[:, 1], "o-", color="0.35", label="initial DLO")
+
+    for force_index, location in enumerate(force_locations):
+        left = int(np.floor(location))
+        left = int(np.clip(left, 0, config.n_nodes - 1))
+        right = min(left + 1, config.n_nodes - 1)
+        alpha = float(location - left)
+        point = (1.0 - alpha) * initial_shape[left] + alpha * initial_shape[right]
+        ax.scatter(point[0], point[1], s=90, label=f"force {force_index + 1}")
+        ax.annotate(
+            f"{location:.2f}",
+            xy=(point[0], point[1]),
+            xytext=(0, 12),
+            textcoords="offset points",
+            ha="center",
+        )
+
+    _set_equal_dlo_axes(ax, config)
+    ax.set_title("Optimized force locations")
+    ax.legend(ncol=2, fontsize=8)
     fig.tight_layout()
     fig.savefig(output_path, dpi=160)
     plt.close(fig)

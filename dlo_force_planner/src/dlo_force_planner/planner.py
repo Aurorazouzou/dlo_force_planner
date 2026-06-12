@@ -13,6 +13,7 @@ from .simulator import SimpleDLOSimulator
 class PlannerResult:
     """All important data produced by the planner."""
 
+    best_force_locations: np.ndarray
     best_force_sequence: np.ndarray
     best_cost: float
     cost_components: dict[str, float]
@@ -46,8 +47,31 @@ def optimize_force_sequence(
     """Optimize a flattened force vector and return the best rollout."""
 
     GA, Callback, ElementwiseProblem, minimize = _require_pymoo()
-    n_force_nodes = len(config.force_nodes)
-    n_variables = config.horizon * n_force_nodes * 2
+    n_force_values = config.horizon * config.n_forces * 2
+    n_variables = config.n_forces + n_force_values
+
+    lower_bounds = np.concatenate(
+        [
+            np.full(config.n_forces, 0.0),
+            np.full(n_force_values, -config.force_max),
+        ]
+    )
+    upper_bounds = np.concatenate(
+        [
+            np.full(config.n_forces, config.n_nodes - 1.0),
+            np.full(n_force_values, config.force_max),
+        ]
+    )
+
+    def split_variables(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Split pymoo's flat vector into locations and time-varying forces."""
+
+        force_locations = x[: config.n_forces]
+        force_sequence = x[config.n_forces :].reshape(config.horizon, config.n_forces, 2)
+        force_magnitude = np.linalg.norm(force_sequence, axis=2, keepdims=True)
+        scale = np.minimum(1.0, config.force_max / (force_magnitude + 1e-12))
+        force_sequence = force_sequence * scale
+        return force_locations, force_sequence
 
     class DLOForceProblem(ElementwiseProblem):
         """pymoo problem wrapper around one DLO rollout."""
@@ -56,16 +80,17 @@ def optimize_force_sequence(
             super().__init__(
                 n_var=n_variables,
                 n_obj=1,
-                xl=-config.force_limit,
-                xu=config.force_limit,
+                xl=lower_bounds,
+                xu=upper_bounds,
             )
 
         def _evaluate(self, x, out, *args, **kwargs):
-            force_sequence = x.reshape(config.horizon, n_force_nodes, 2)
-            rollout = simulator.rollout(force_sequence)
+            force_locations, force_sequence = split_variables(x)
+            rollout = simulator.rollout(force_locations, force_sequence)
             cost, _ = total_cost(
                 rollout.positions,
                 target_shape,
+                force_locations,
                 force_sequence,
                 config,
             )
@@ -93,16 +118,24 @@ def optimize_force_sequence(
         verbose=False,
     )
 
-    best_force_sequence = result.X.reshape(config.horizon, n_force_nodes, 2)
-    rollout = simulator.rollout(best_force_sequence)
+    best_vector = np.asarray(result.X, dtype=float).reshape(-1).copy()
+    best_force_locations, best_force_sequence = split_variables(best_vector)
+    rollout = simulator.rollout(best_force_locations, best_force_sequence)
     best_cost, components = total_cost(
         rollout.positions,
         target_shape,
+        best_force_locations,
         best_force_sequence,
         config,
     )
+    for index, location in enumerate(best_force_locations, start=1):
+        components[f"force_location_{index}"] = float(location)
+    components["force_location_start"] = float(best_force_locations[0])
+    components["force_location_end"] = float(best_force_locations[-1])
+    components["force_location_mean"] = float(np.mean(best_force_locations))
 
     return PlannerResult(
+        best_force_locations=best_force_locations,
         best_force_sequence=best_force_sequence,
         best_cost=float(best_cost),
         cost_components=components,
